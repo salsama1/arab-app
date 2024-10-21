@@ -1,64 +1,54 @@
-import os
-
-# Set environment variable to allow duplicate OpenMP runtime initialization
-os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
-
-from flask import Flask, request, jsonify
+import cv2
 import easyocr
-from flask_cors import CORS
+import numpy as np
+from flask import Flask, request, jsonify, make_response
 
 app = Flask(__name__)
-CORS(app)
 
-UPLOAD_FOLDER = 'uploads'
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-
-# Initialize EasyOCR reader with Arabic language support
+# Initialize EasyOCR Reader for Arabic language
 reader = easyocr.Reader(['ar'])
 
-# Arabic digits list
-arabic_digits = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩']
+def process_image(image):
+    # Convert image to grayscale
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    # Resize image to a standard size for better OCR accuracy
+    resized = cv2.resize(gray, (600, 600), interpolation=cv2.INTER_LINEAR)
+    return resized
+
+def extract_text(image):
+    # Read text using EasyOCR
+    results = reader.readtext(image, detail=0)  # Get all detected text without filtering
+    return results
 
 @app.route('/upload', methods=['POST'])
 def upload_image():
     if 'image' not in request.files:
-        print("No image part in the request")
-        return jsonify({'error': 'No image provided'}), 400
+        return make_response(jsonify({"message": "No image file provided"}), 400)
 
-    image_file = request.files['image']
-    image_path = os.path.join(UPLOAD_FOLDER, image_file.filename)
-    image_file.save(image_path)
+    file = request.files['image']
 
-    try:
-        # Perform OCR using EasyOCR
-        results = reader.readtext(image_path, detail=0)
-        recognized_text = ''.join(results)
-        print(f"Recognized text: {recognized_text}")
+    # Check if the file is an image
+    if not file.content_type.startswith('image/'):
+        return make_response(jsonify({"message": "Uploaded file is not an image"}), 400)
 
-        # Filter out the first Arabic digit found
-        single_arabic_digit = None
-        for char in recognized_text:
-            if char in arabic_digits:
-                single_arabic_digit = char
-                break
+    # Read the image from the uploaded file
+    np_img = np.frombuffer(file.read(), np.uint8)
+    image = cv2.imdecode(np_img, cv2.IMREAD_COLOR)
 
-        if single_arabic_digit is None:
-            return jsonify({'error': 'No Arabic digit recognized'}), 400
+    if image is None:
+        return make_response(jsonify({"message": "Invalid image file"}), 400)
 
-    except Exception as e:
-        print(f"Error processing image: {e}")
-        return jsonify({'error': 'Failed to process image'}), 500
+    # Process the image and extract text
+    processed_image = process_image(image)
+    detected_text = extract_text(processed_image)
 
-    # Write the recognized Arabic digit to a file
-    try:
-        output_file = os.path.join(UPLOAD_FOLDER, 'output.txt')
-        with open(output_file, 'w', encoding='utf-8') as f:
-            f.write(single_arabic_digit)
-    except Exception as e:
-        print(f"Error writing to file: {e}")
-        return jsonify({'error': 'Failed to write output'}), 500
-
-    return jsonify({'message': 'Arabic digit recognized and saved', 'recognized_digit': single_arabic_digit}), 200
+    # Print all detected text in the terminal
+    if detected_text:
+        print(f"Detected text: {', '.join(detected_text)}")
+        return jsonify({"message": f"Detected text: {', '.join(detected_text)}"})
+    else:
+        print("No text found in the image")
+        return jsonify({"message": "No text found in the image"})
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True, host='0.0.0.0')
