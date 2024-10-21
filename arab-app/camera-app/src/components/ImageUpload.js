@@ -16,6 +16,12 @@ const ImageUpload = () => {
             return;
         }
 
+        // Check image type
+        if (!image.type.startsWith('image/')) {
+            alert('Please upload a valid image file');
+            return;
+        }
+
         const formData = new FormData();
         formData.append('image', image);
 
@@ -28,7 +34,7 @@ const ImageUpload = () => {
             });
             setResponse(res.data.message);
         } catch (error) {
-            console.error('Error uploading image:', error);
+            console.error('Error uploading image:', error.response || error.message);
             setResponse('Error uploading image');
         } finally {
             setIsLoading(false);
@@ -37,11 +43,11 @@ const ImageUpload = () => {
 
     return (
         <div className="flex flex-col items-center justify-center h-screen bg-gray-100">
-            <h1 className="text-3xl font-bold mb-4">OCR Image Upload</h1>
-            <input
-                type="file"
-                accept="image/*"
-                onChange={handleImageChange}
+            <h1 className="text-3xl font-bold mb-4">Upload Image for OCR</h1>
+            <input 
+                type="file" 
+                accept="image/*" 
+                onChange={handleImageChange} 
                 className="mb-4 p-2 border rounded"
             />
             <button
