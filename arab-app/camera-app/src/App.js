@@ -1,13 +1,12 @@
 import React from 'react';
-import './index.css';
-import ImageUpload from './components/ImageUpload';
+import FileUpload from './components/FileUpload';
 
 function App() {
-    return (
-        <div>
-            <ImageUpload />
-        </div>
-    );
+  return (
+    <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+      <FileUpload />
+    </div>
+  );
 }
 
 export default App;

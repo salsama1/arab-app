@@ -1,46 +1,50 @@
 from flask import Flask, request, jsonify
-import pytesseract
+import cv2
+import numpy as np
+import pyttsx3
 from PIL import Image
-import os
-from flask_cors import CORS
+import io
 
 app = Flask(__name__)
-CORS(app)
 
-UPLOAD_FOLDER = 'uploads'
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+# Load templates for Arabic numerals (0-9)
+templates = {i: cv2.imread(f'templates/{i}.png', 0) for i in range(10)}
 
-@app.route('/upload', methods=['POST'])
-def upload_image():
-    # Check if the 'image' part is present in the request
+def recognize_numeral(image):
+    gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    best_match, best_score = None, float('inf')
+
+    for numeral, template in templates.items():
+        res = cv2.matchTemplate(gray_image, template, cv2.TM_SQDIFF)
+        min_val, _, _, _ = cv2.minMaxLoc(res)
+
+        if min_val < best_score:
+            best_match, best_score = numeral, min_val
+
+    return best_match
+
+def speak_number(numeral):
+    engine = pyttsx3.init()
+    engine.setProperty('rate', 120)
+    engine.say(str(numeral))
+    engine.runAndWait()
+
+@app.route('/api/upload', methods=['POST'])
+def upload_file():
     if 'image' not in request.files:
-        print("No image part in the request")
-        return jsonify({'error': 'No image provided'}), 400
+        return jsonify({'error': 'No file uploaded'}), 400
 
-    image_file = request.files['image']
-    print(f"Received image: {image_file.filename}")
+    file = request.files['image']
+    image = Image.open(file.stream)
+    image = np.array(image)
 
-    # Save the image to the uploads folder
-    image_path = os.path.join(UPLOAD_FOLDER, image_file.filename)
-    image_file.save(image_path)
+    recognized_numeral = recognize_numeral(image)
 
-    # Perform OCR on the image
-    try:
-        text = pytesseract.image_to_string(Image.open(image_path), lang='ara')
-    except Exception as e:
-        print(f"Error processing image: {e}")
-        return jsonify({'error': 'Failed to process image'}), 500
-
-    # Write recognized text to a file
-    try:
-        output_file = os.path.join(UPLOAD_FOLDER, 'output.txt')
-        with open(output_file, 'w', encoding='utf-8') as f:
-            f.write(text)
-    except Exception as e:
-        print(f"Error writing to file: {e}")
-        return jsonify({'error': 'Failed to write output'}), 500
-
-    return jsonify({'message': 'Text recognized and saved'}), 200
+    if recognized_numeral is not None:
+        speak_number(recognized_numeral)
+        return jsonify({'number': recognized_numeral}), 200
+    else:
+        return jsonify({'error': 'No numeral recognized'}), 400
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=5000)
